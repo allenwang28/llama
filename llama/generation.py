@@ -100,12 +100,12 @@ class Llama:
             bucket = client.get_bucket(bucket_name)
             blobs = bucket.list_blobs(prefix=folder_prefix)
 
-            checkpoints = [blob.name for blob in blob if blob.name.endswith(".pth")]
+            checkpoints = [blob.name for blob in blobs if blob.name.endswith(".pth")]
             num_checkpoints = len(checkpoints)
             if num_checkpoints > 0:
                 assert model_parallel_size == num_checkpoints, f"Loading a checkpoint for MP={len(checkpoints)} but world size is {model_parallel_size}"
                 ckpt_path = checkpoints[rank]
-                blob = bucket.get_blob(f"{folder_prefix}/{ckpt_path}")
+                blob = bucket.get_blob(ckpt_path)
                 model_bytes = blob.download_as_bytes()
                 checkpoint = torch.load(BytesIO(model_bytes), map_location="cpu")
             else:
