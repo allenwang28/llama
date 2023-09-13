@@ -113,7 +113,7 @@ class Llama:
                 checkpoint = None
             blob = bucket.get_blob(f"{folder_prefix}/params.json")
             print("Loading params")
-            params = json.loads(BytesIO(blob.download_as_bytes()))
+            params = json.loads(blob.download_as_text())
         else:
             checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
             if len(checkpoints) > 0:
