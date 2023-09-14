@@ -1,5 +1,5 @@
-
-
+import torch
+import json
 from google.cloud import storage
 from io import BytesIO
 
@@ -8,13 +8,13 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
     split_name = ckpt_dir[5:].split("/")
     bucket_name = split_name[0]
     folder_prefix = ("/").join(split_name[1:])
+    client = storage.Client()
+    bucket = client.get_bucket(bucket_name)
 
     blob = bucket.get_blob(f"{folder_prefix}/params.json")
     print("Loading params")
     params = json.loads(blob.download_as_text())
 
-    client = storage.Client()
-    bucket = client.get_bucket(bucket_name)
     blobs = bucket.list_blobs(prefix=folder_prefix)
 
     checkpoints = [blob.name for blob in blobs if blob.name.endswith(".pth")]
@@ -30,17 +30,28 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
         n_heads_per_shard = n_heads // num_shards
         dim = params["dim"]
         dims_per_head = dim // n_heads
-        print("num shards: ", num_shards)
-        print("num layers: ", n_layers)
-        print("n_heads: ", n_heads)
-        print("n_heads_per_shard: ", n_heads_per_shard)
+        base = params.get("rope_theta", 10000.0)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+
+        if "n_kv_heads" in params:
+            num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
+            num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
+            key_value_dim = dim // num_key_value_heads
+        else:  # compatibility with other checkpoints
+            num_key_value_heads = n_heads
+            num_local_key_value_heads = n_heads_per_shard
+            key_value_dim = dim
+
+        # permute for sliced rotary
+        def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
+            return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
         checkpoint_shards = []
         for i, checkpoint in enumerate(checkpoints):
-            ckpt_path = checkpoints[rank]
+            ckpt_path = checkpoints[i]
             blob = bucket.get_blob(ckpt_path)
-            model_bytes = blob.download_as_bytes()
             print(f"loading {ckpt_path}")
+            model_bytes = blob.download_as_bytes()
             checkpoint_shards.append(
                 torch.load(BytesIO(model_bytes), map_location="cpu"))
         for layer_i in range(n_layers):

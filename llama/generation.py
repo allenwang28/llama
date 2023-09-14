@@ -113,8 +113,6 @@ class Llama:
             **params,
         )
 
-        model_args.print_values()
-
         tokenizer = Tokenizer(model_path=tokenizer_path)
         model_args.vocab_size = tokenizer.n_words
         if USE_CUDA:
