@@ -54,17 +54,20 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
         checkpoint = {}
         if num_shards == 1:
             checkpoint.update({
-                "model.embed_tokens.weight": checkpoint_shards[0]["tok_embeddings.weight"],
-                "model.norm.weight": checkpoint_shards[0]["norm.weight"],
-                "lm_head.weight": checkpoint_shards[0]["output.weight"],
+                "tok_embeddings.weight": checkpoint_shards[0]["tok_embeddings.weight"],
+                "norm.weight": checkpoint_shards[0]["norm.weight"],
+                "output.weight": checkpoint_shards[0]["output.weight"],
+                "rope.freqs": checkpoint_shards[0]["rope.freqs"],
             })
         else:
             checkpoint.update({
-                "model.norm.weight": checkpoint_shards[0]["norm.weight"],
-                "model.embed_tokens.weight": torch.cat(
+                "norm.weight": checkpoint_shards[0]["norm.weight"],
+                "tok_embeddings.weight": torch.cat(
                     [checkpoint_shards[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
                 ),
-                "lm_head.weight": torch.cat([checkpoint_shards[i]["output.weight"] for i in range(num_shards)], dim=0),
+                "output.weight": torch.cat([checkpoint_shards[i]["output.weight"] for i in range(num_shards)], dim=0),
+                # cat on dim 0 or 1?
+                "rope.freqs": torch.cat([checkpoint_shards[i]["rope.freqs"] for i in range(num_shards)], dim=0),
             })
 
         for layer_i in range(n_layers):
