@@ -42,10 +42,6 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
             num_local_key_value_heads = n_heads_per_shard
             key_value_dim = dim
 
-        # permute for sliced rotary
-        def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
-            return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
-
         checkpoint_shards = []
         for i, checkpoint in enumerate(checkpoints):
             ckpt_path = checkpoints[i]
@@ -54,15 +50,32 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
             model_bytes = blob.download_as_bytes()
             checkpoint_shards.append(
                 torch.load(BytesIO(model_bytes), map_location="cpu"))
+
+        checkpoint = {}
+        if num_shards == 1:
+            checkpoint.update({
+                "model.embed_tokens.weight": checkpoint_shards["tok_embeddings.weight"],
+                "model.norm.weight": checkpoint_shards["norm.weight"],
+                "lm_head.weight": checkpoint_shards["output.weight"],
+            })
+        else:
+            checkpoint.update({
+                "model.norm.weight": checkpoint_shards[0]["norm.weight"],
+                "model.embed_tokens.weight": torch.cat(
+                    [checkpoint_shards[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
+                ),
+                "lm_head.weight": torch.cat([checkpoint_shards[i]["output.weight"] for i in range(num_shards)], dim=0),
+            })
+
         for layer_i in range(n_layers):
             if num_shards == 1:
                 # 7B, already unsharded
                 checkpoint_shard = checkpoint_shards[0]
-                checkpoint = {
-                    f"layers.{layer_i}.attention.wq.weight": permute(
+                checkpoint.update({
+                    f"layers.{layer_i}.attention.wq.weight": (
                         checkpoint_shard[f"layers.{layer_i}.attention.wq.weight"]
                     ),
-                    f"layers.{layer_i}.attention.wk.weight": permute(
+                    f"layers.{layer_i}.attention.wk.weight": (
                         checkpoint_shard[f"layers.{layer_i}.attention.wk.weight"]
                     ),
                     f"layers.{layer_i}.attention.wv.weight": checkpoint_shard[f"layers.{layer_i}.attention.wv.weight"],
@@ -72,18 +85,18 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                     f"layers.{layer_i}.feed_forward.w3.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w3.weight"],
                     f"layers.{layer_i}.attention_norm.weight": checkpoint_shard[f"layers.{layer_i}.attention_norm.weight"],
                     f"layers.{layer_i}.ffn_norm.weight": checkpoint_shard[f"layers.{layer_i}.ffn_norm.weight"],
-                }
+                })
             else:
                 # Sharded
-                checkpoint = {
+                checkpoint.update({
                     f"layers.{layer_i}.attention_norm.weight": checkpoint_shards[0][
                         f"layers.{layer_i}.attention_norm.weight"
                     ].clone(),
                     f"layers.{layer_i}.ffn_norm.weight": checkpoint_shards[0][
                         f"layers.{layer_i}.ffn_norm.weight"
                     ].clone(),
-                }
-                checkpoint[f"layers.{layer_i}.attention.wq.weight"] = permute(
+                })
+                checkpoint[f"layers.{layer_i}.attention.wq.weight"] = (
                     torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
@@ -92,7 +105,7 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                         dim=0,
                     ).reshape(dim, dim)
                 )
-                checkpoint[f"layers.{layer_i}.attention.wk.weight"] = permute(
+                checkpoint[f"layers.{layer_i}.attention.wk.weight"] = (
                     torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wk.weight"].view(
