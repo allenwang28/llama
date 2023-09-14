@@ -58,11 +58,7 @@ def main(
     ]
 
     import time
-    print("About to start in 15 seconds")
     server = xp.start_server(9012, only_on_master=False)
-    time.sleep(15)
-    print("Starting!")
-
     for _ in range(2):
         with torch.no_grad():
             results = generator.text_completion(

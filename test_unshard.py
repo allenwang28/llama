@@ -1,3 +1,4 @@
+
 import torch
 import json
 from google.cloud import storage
@@ -142,7 +143,23 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                     [checkpoint_shards[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
                 )
 
-    return params, checkpoint
+    return checkpoint, checkpoint_shards[0]
 
 
+unsharded_checkpoint, original_checkpoint = load_unsharded_model(
+    ckpt_dir="gs://ray-llama-demo/llama-2-7b")
+
+print("checking key diffs")
+
+keys1 = set(unsharded_checkpoint.keys())
+keys2 = set(original_checkpoint.keys())
+
+print("Keys in the unsharded state_dict but not the original:", keys1 - keys2)
+print("Keys in the original state_dict but not the unsharded:", keys2 - keys1)
+
+print("Checking frobenius norm")
+for key in original_checkpoint:
+    diff = original_checkpoint[key] - unsharded_checkpoint[key]
+    norm = torch.norm(diff, p='fro')
+    print(f"Frobenius norm of the difference for {key}: {norm.item()}")
 
