@@ -75,12 +75,8 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                 # 7B, already unsharded
                 checkpoint_shard = checkpoint_shards[0]
                 checkpoint.update({
-                    f"layers.{layer_i}.attention.wq.weight": (
-                        checkpoint_shard[f"layers.{layer_i}.attention.wq.weight"]
-                    ),
-                    f"layers.{layer_i}.attention.wk.weight": (
-                        checkpoint_shard[f"layers.{layer_i}.attention.wk.weight"]
-                    ),
+                    f"layers.{layer_i}.attention.wq.weight": checkpoint_shard[f"layers.{layer_i}.attention.wq.weight"],
+                    f"layers.{layer_i}.attention.wk.weight": checkpoint_shard[f"layers.{layer_i}.attention.wk.weight"],
                     f"layers.{layer_i}.attention.wv.weight": checkpoint_shard[f"layers.{layer_i}.attention.wv.weight"],
                     f"layers.{layer_i}.attention.wo.weight": checkpoint_shard[f"layers.{layer_i}.attention.wo.weight"],
                     f"layers.{layer_i}.feed_forward.w1.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w1.weight"],
@@ -99,17 +95,14 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                         f"layers.{layer_i}.ffn_norm.weight"
                     ].clone(),
                 })
-                checkpoint[f"layers.{layer_i}.attention.wq.weight"] = (
-                    torch.cat(
+                checkpoint[f"layers.{layer_i}.attention.wq.weight"] = torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
                             for i in range(num_shards)
                         ],
                         dim=0,
                     ).reshape(dim, dim)
-                )
-                checkpoint[f"layers.{layer_i}.attention.wk.weight"] = (
-                    torch.cat(
+                checkpoint[f"layers.{layer_i}.attention.wk.weight"] = torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wk.weight"].view(
                                 num_local_key_value_heads, dims_per_head, dim
@@ -117,11 +110,7 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                             for i in range(num_shards)
                         ],
                         dim=0,
-                    ).reshape(key_value_dim, dim),
-                    num_key_value_heads,
-                    key_value_dim,
-                    dim,
-                )
+                    ).reshape(key_value_dim, dim)
                 checkpoint[f"layers.{layer_i}.attention.wv.weight"] = torch.cat(
                     [
                         checkpoint_shards[i][f"layers.{layer_i}.attention.wv.weight"].view(
@@ -146,6 +135,4 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                 )
 
     return params, checkpoint
-
-
 
