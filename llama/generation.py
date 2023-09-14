@@ -15,9 +15,8 @@ import torch_xla
 from llama.model import ModelArgs, Transformer
 from llama.tokenizer import Tokenizer
 from llama.xla_model_parallel import get_model_parallel_rank, get_model_parallel_world_size, set_g_group
+from llama.unshard_checkpoint import load_unsharded_model
 
-from google.cloud import storage
-from io import BytesIO
 
 USE_CUDA = os.environ.get('USE_CUDA', False)
 
@@ -93,28 +92,7 @@ class Llama:
 
         start_time = time.time()
         if ckpt_dir.startswith("gs://"):
-            split_name = ckpt_dir[5:].split("/")
-            bucket_name = split_name[0]
-            folder_prefix = ("/").join(split_name[1:])
-
-            client = storage.Client()
-            bucket = client.get_bucket(bucket_name)
-            blobs = bucket.list_blobs(prefix=folder_prefix)
-
-            checkpoints = [blob.name for blob in blobs if blob.name.endswith(".pth")]
-            num_checkpoints = len(checkpoints)
-            if num_checkpoints > 0:
-                assert model_parallel_size == num_checkpoints, f"Loading a checkpoint for MP={len(checkpoints)} but world size is {model_parallel_size}"
-                ckpt_path = checkpoints[rank]
-                blob = bucket.get_blob(ckpt_path)
-                model_bytes = blob.download_as_bytes()
-                checkpoint = torch.load(BytesIO(model_bytes), map_location="cpu")
-            else:
-                print(f"no checkpoint files found in {ckpt_dir}, init model without loading checkpoint.")
-                checkpoint = None
-            blob = bucket.get_blob(f"{folder_prefix}/params.json")
-            print("Loading params")
-            params = json.loads(blob.download_as_text())
+            params, checkpoint = load_unsharded_model(ckpt_dir)
         else:
             checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
             if len(checkpoints) > 0:
