@@ -32,6 +32,10 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
         dims_per_head = dim // n_heads
         base = params.get("rope_theta", 10000.0)
         inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+        print("DEBUG: n_heads: ", n_heads)
+        print("DEBUG: n_head_per_shard: ", n_head_per_shard)
+        print("DEBUG: dim: ", dim)
+        print("DEBUG: dims_per_head: ", dims_per_head)
 
         if "n_kv_heads" in params:
             num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
