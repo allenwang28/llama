@@ -115,6 +115,7 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                         ],
                         dim=0,
                     ).reshape(key_value_dim, dim)
+                print("DEBUG: wk shape: ", checkpoint[f"layers.{layer_i}.attention.wk.weight"].shape)
                 checkpoint[f"layers.{layer_i}.attention.wv.weight"] = torch.cat(
                     [
                         checkpoint_shards[i][f"layers.{layer_i}.attention.wv.weight"].view(
@@ -137,6 +138,9 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                 checkpoint[f"layers.{layer_i}.feed_forward.w3.weight"] = torch.cat(
                     [checkpoint_shards[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
                 )
+
+    for key in checkpoint.keys():
+      print(f"{key}: {checkpoint[key].shape}")
 
     return params, checkpoint
 
