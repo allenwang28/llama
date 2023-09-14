@@ -59,35 +59,31 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                 # 7B, already unsharded
                 checkpoint_shard = checkpoint_shards[0]
                 checkpoint = {
-                    f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
+                    f"layers.{layer_i}.attention.wq.weight": permute(
                         checkpoint_shard[f"layers.{layer_i}.attention.wq.weight"]
                     ),
-                    f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
+                    f"layers.{layer_i}.attention.wk.weight": permute(
                         checkpoint_shard[f"layers.{layer_i}.attention.wk.weight"]
                     ),
-                    f"model.layers.{layer_i}.self_attn.v_proj.weight": checkpoint_shard[f"layers.{layer_i}.attention.wv.weight"],
-                    f"model.layers.{layer_i}.self_attn.o_proj.weight": checkpoint_shard[f"layers.{layer_i}.attention.wo.weight"],
-                    f"model.layers.{layer_i}.mlp.gate_proj.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w1.weight"],
-                    f"model.layers.{layer_i}.mlp.down_proj.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w2.weight"],
-                    f"model.layers.{layer_i}.mlp.up_proj.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w3.weight"],
-                    f"model.layers.{layer_i}.input_layernorm.weight": checkpoint_shard[f"layers.{layer_i}.attention_norm.weight"],
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": checkpoint_shard[f"layers.{layer_i}.ffn_norm.weight"],
+                    f"layers.{layer_i}.attention.wv.weight": checkpoint_shard[f"layers.{layer_i}.attention.wv.weight"],
+                    f"layers.{layer_i}.attention.wo.weight": checkpoint_shard[f"layers.{layer_i}.attention.wo.weight"],
+                    f"layers.{layer_i}.feed_forward.w1.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w1.weight"],
+                    f"layers.{layer_i}.feed_forward.w2.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w2.weight"],
+                    f"layers.{layer_i}.feed_forward.w3.weight": checkpoint_shard[f"layers.{layer_i}.feed_forward.w3.weight"],
+                    f"layers.{layer_i}.attention_norm.weight": checkpoint_shard[f"layers.{layer_i}.attention_norm.weight"],
+                    f"layers.{layer_i}.ffn_norm.weight": checkpoint_shard[f"layers.{layer_i}.ffn_norm.weight"],
                 }
             else:
                 # Sharded
-                # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
-                # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
-                # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
-
                 checkpoint = {
-                    f"model.layers.{layer_i}.input_layernorm.weight": checkpoint_shards[0][
+                    f"layers.{layer_i}.attention_norm.weight": checkpoint_shards[0][
                         f"layers.{layer_i}.attention_norm.weight"
                     ].clone(),
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": checkpoint_shards[0][
+                    f"layers.{layer_i}.ffn_norm.weight": checkpoint_shards[0][
                         f"layers.{layer_i}.ffn_norm.weight"
                     ].clone(),
                 }
-                checkpoint[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
+                checkpoint[f"layers.{layer_i}.attention.wq.weight"] = permute(
                     torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
@@ -96,7 +92,7 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                         dim=0,
                     ).reshape(dim, dim)
                 )
-                checkpoint[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
+                checkpoint[f"layers.{layer_i}.attention.wk.weight"] = permute(
                     torch.cat(
                         [
                             checkpoint_shards[i][f"layers.{layer_i}.attention.wk.weight"].view(
@@ -110,7 +106,7 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                     key_value_dim,
                     dim,
                 )
-                checkpoint[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
+                checkpoint[f"layers.{layer_i}.attention.wv.weight"] = torch.cat(
                     [
                         checkpoint_shards[i][f"layers.{layer_i}.attention.wv.weight"].view(
                             num_local_key_value_heads, dims_per_head, dim
@@ -120,19 +116,20 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
                     dim=0,
                 ).reshape(key_value_dim, dim)
 
-                checkpoint[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
+                checkpoint[f"layers.{layer_i}.attention.wo.weight"] = torch.cat(
                     [checkpoint_shards[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(num_shards)], dim=1
                 )
-                checkpoint[f"model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
+                checkpoint[f"layers.{layer_i}.feed_forward.w1.weight"] = torch.cat(
                     [checkpoint_shards[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(num_shards)], dim=0
                 )
-                checkpoint[f"model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
+                checkpoint[f"layers.{layer_i}.feed_forward.w2.weight"] = torch.cat(
                     [checkpoint_shards[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(num_shards)], dim=1
                 )
-                checkpoint[f"model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
+                checkpoint[f"layers.{layer_i}.feed_forward.w3.weight"] = torch.cat(
                     [checkpoint_shards[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
                 )
-            checkpoint[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
+            checkpoint[f"layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
+
     return params, checkpoint
 
 
