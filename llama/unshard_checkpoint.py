@@ -38,9 +38,14 @@ def load_unsharded_model(ckpt_dir: str) -> "checkpoint":
         print("DEBUG: dims_per_head: ", dims_per_head)
 
         if "n_kv_heads" in params:
+            """
             num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
             num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
             key_value_dim = dim // num_key_value_heads
+            """
+            num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
+            num_local_key_value_heads = num_key_value_heads // num_shards
+            key_value_dim = dim // n_heads * num_key_value_heads
         else:  # compatibility with other checkpoints
             num_key_value_heads = n_heads
             num_local_key_value_heads = n_heads_per_shard
